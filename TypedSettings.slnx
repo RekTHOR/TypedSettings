@@ -1,0 +1,8 @@
+<Solution>
+    <Folder Name="/Solution Items/">
+        <File Path="README.md"/>
+        <File Path="LICENSE"/>
+    </Folder>
+    <Project Path="src/RekTHOR.TypedSettings/RekTHOR.TypedSettings.csproj"/>
+    <Project Path="tests/RekTHOR.TypedSettings.Tests/RekTHOR.TypedSettings.Tests.csproj"/>
+</Solution>
