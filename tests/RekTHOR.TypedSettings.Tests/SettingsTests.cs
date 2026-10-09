@@ -18,6 +18,32 @@ public class SettingsTests
         [Range(1, 65535)] public int Port { get; set; } = 25;
     }
 
+    private sealed class PdfSettings : ISettings<PdfSettings>
+    {
+        public static string SectionName => "Pdf";
+
+        [Required] public Section Confirmation { get; set; } = null!;
+
+        public List<Clause> Clauses { get; set; } = [];
+
+        public sealed class Section
+        {
+            [Required] 
+            public string Title { get; set; } = null!;
+
+            [MinLength(1)] 
+            public string[] Paragraphs { get; set; } = [];
+
+            public Section? Child { get; set; }
+        }
+
+        public sealed class Clause
+        {
+            [Required] 
+            public string Text { get; set; } = null!;
+        }
+    }
+
     private static IConfiguration Config(Dictionary<string, string?> values) =>
         new ConfigurationBuilder().AddInMemoryCollection(values).Build();
 
@@ -115,5 +141,111 @@ public class SettingsTests
 
         Assert.Equal("smtp.test", settings.Host);
         Assert.Equal(25, settings.Port);
+    }
+
+    private static Dictionary<string, string?> ValidPdf() => new()
+    {
+        ["Pdf:Confirmation:Title"] = "t",
+        ["Pdf:Confirmation:Paragraphs:0"] = "p"
+    };
+
+    [Fact]
+    public void GetSettings_NestedObjectInvalid_ReportsConfigurationPath()
+    {
+        Dictionary<string, string?> values = ValidPdf();
+        values.Remove("Pdf:Confirmation:Title");
+
+        OptionsValidationException ex =
+            Assert.Throws<OptionsValidationException>(Config(values).GetSettings<PdfSettings>);
+
+        string failure = Assert.Single(ex.Failures);
+        Assert.StartsWith("Pdf:Confirmation: ", failure);
+        Assert.Contains("Title", failure);
+    }
+
+    [Fact]
+    public void GetSettings_NestedArrayTooShort_Fails()
+    {
+        Dictionary<string, string?> values = ValidPdf();
+        values.Remove("Pdf:Confirmation:Paragraphs:0");
+
+        Assert.Throws<OptionsValidationException>(Config(values).GetSettings<PdfSettings>);
+    }
+
+    [Fact]
+    public void GetSettings_CollectionItemInvalid_ReportsIndex()
+    {
+        Dictionary<string, string?> values = ValidPdf();
+        values["Pdf:Clauses:1:Text"] = "";
+        values["Pdf:Clauses:0:Text"] = "ok";
+
+        OptionsValidationException ex =
+            Assert.Throws<OptionsValidationException>(Config(values).GetSettings<PdfSettings>);
+
+        Assert.StartsWith("Pdf:Clauses:1: ", Assert.Single(ex.Failures));
+    }
+
+    [Fact]
+    public void GetSettings_DeeplyNestedInvalid_Fails()
+    {
+        Dictionary<string, string?> values = ValidPdf();
+        values["Pdf:Confirmation:Child:Paragraphs:0"] = "p";
+
+        OptionsValidationException ex =
+            Assert.Throws<OptionsValidationException>(Config(values).GetSettings<PdfSettings>);
+
+        Assert.StartsWith("Pdf:Confirmation:Child: ", Assert.Single(ex.Failures));
+    }
+
+    [Fact]
+    public void GetSettings_NestedValid_Succeeds()
+    {
+        PdfSettings settings = Config(ValidPdf()).GetSettings<PdfSettings>();
+
+        Assert.Equal("t", settings.Confirmation.Title);
+    }
+
+    [Fact]
+    public void AddSettings_NestedObjectInvalid_FailsOnResolve()
+    {
+        Dictionary<string, string?> values = ValidPdf();
+        values.Remove("Pdf:Confirmation:Title");
+
+        ServiceCollection services = new();
+        services.AddSingleton(Config(values));
+        services.AddSettings<PdfSettings>();
+        using ServiceProvider sp = services.BuildServiceProvider();
+
+        OptionsValidationException ex = Assert.Throws<OptionsValidationException>(sp.GetRequiredService<PdfSettings>);
+
+        Assert.Single(ex.Failures);
+    }
+
+    [Fact]
+    public void StartupValidator_NestedObjectInvalid_FailsBeforeAnySettingsIsResolved()
+    {
+        Dictionary<string, string?> values = ValidPdf();
+        values.Remove("Pdf:Confirmation:Title");
+
+        ServiceCollection services = new();
+        services.AddSingleton(Config(values));
+        services.AddSettings<PdfSettings>();
+        using ServiceProvider sp = services.BuildServiceProvider();
+
+        OptionsValidationException ex =
+            Assert.Throws<OptionsValidationException>(sp.GetRequiredService<IStartupValidator>().Validate);
+
+        Assert.StartsWith("Pdf:Confirmation: ", Assert.Single(ex.Failures));
+    }
+
+    [Fact]
+    public void StartupValidator_ValidSettings_Passes()
+    {
+        ServiceCollection services = new();
+        services.AddSingleton(Config(ValidPdf()));
+        services.AddSettings<PdfSettings>();
+        using ServiceProvider sp = services.BuildServiceProvider();
+
+        sp.GetRequiredService<IStartupValidator>().Validate();
     }
 }

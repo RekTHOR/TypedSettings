@@ -9,7 +9,7 @@
 
     <PropertyGroup>
         <PackageId>RekTHOR.TypedSettings</PackageId>
-        <Version>0.1.0</Version>
+        <Version>0.2.0</Version>
         <Authors>RekTHOR</Authors>
         <Description>Strongly typed, validated settings on top of the Options pattern: the type names its own configuration section, DI hands out the plain settings object, and an enum picks the reload behaviour.</Description>
         <PackageTags>settings;configuration;options;dependency-injection;validation</PackageTags>
@@ -28,7 +28,6 @@
 
     <ItemGroup>
         <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="10.0.10"/>
-        <PackageReference Include="Microsoft.Extensions.Options.DataAnnotations" Version="10.0.10"/>
     </ItemGroup>
 
     <ItemGroup>

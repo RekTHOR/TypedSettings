@@ -1,4 +1,3 @@
-using System.ComponentModel.DataAnnotations;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
@@ -11,7 +10,7 @@ namespace TypedSettings;
 public static class SettingsServiceCollectionExtensions
 {
     /// <summary>
-    /// Binds <typeparamref name="T"/> to its configuration section, validates its DataAnnotations on startup,
+    /// Binds <typeparamref name="T"/> to its configuration section, validates its DataAnnotations (including nested objects and collection items) on startup,
     /// and registers the plain settings object in DI with the lifetime implied by <paramref name="reloadMode"/>.
     /// </summary>
     /// <param name="services">The service collection to add the settings to.</param>
@@ -26,8 +25,9 @@ public static class SettingsServiceCollectionExtensions
     {
         services
             .AddOptionsWithValidateOnStart<T>()
-            .BindConfiguration(T.SectionName)
-            .ValidateDataAnnotations();
+            .BindConfiguration(T.SectionName);
+
+        services.AddSingleton<IValidateOptions<T>, RecursiveValidateOptions<T>>();
 
         services.Add(reloadMode switch
         {
@@ -44,7 +44,7 @@ public static class SettingsServiceCollectionExtensions
     }
 
     /// <summary>
-    /// Reads and validates <typeparamref name="T"/> directly from the configuration, without a DI container.
+    /// Reads and validates <typeparamref name="T"/> (including nested objects) directly from the configuration, without a DI container.
     /// Useful while the host is still being configured. Falls back to a default instance if the section is missing.
     /// </summary>
     /// <param name="configuration">The configuration to read the settings section from.</param>
@@ -56,16 +56,8 @@ public static class SettingsServiceCollectionExtensions
     {
         T settings = configuration.GetSection(T.SectionName).Get<T>() ?? new T();
 
-        List<ValidationResult> results = [];
+        List<string> errors = RecursiveValidator.Validate(settings, T.SectionName);
 
-        if (!Validator.TryValidateObject(settings, new ValidationContext(settings), results, true))
-        {
-            throw new OptionsValidationException(
-                T.SectionName,
-                typeof(T),
-                results.Select(r => r.ErrorMessage ?? $"'{T.SectionName}' is invalid."));
-        }
-
-        return settings;
+        return errors.Count > 0 ? throw new OptionsValidationException(T.SectionName, typeof(T), errors) : settings;
     }
 }
